@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ko" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drift 0020 *reprise Archive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyDlA3bj9l2kESMnn8GfvU60qGWX-AVRyi8",
+            authDomain: "drift0020-reprise.firebaseapp.com",
+            projectId: "drift0020-reprise",
+            storageBucket: "drift0020-reprise.firebasestorage.app",
+            messagingSenderId: "1041258745589",
+            appId: "1:1041258745589:web:960376ebd030f330993fbc",
+            measurementId: "G-LE6ZX7TZP7"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
+
+        window.handleGoogleLogin = async function() {
+            try {
+                const result = await signInWithPopup(auth, provider);
+                const email = result.user.email;
+
+                // 화이트리스트 체크
+                const docRef = doc(db, "allowed_emails", email);
+                const docSnap = await getDoc(docRef);
+
+                if (!docSnap.exists()) {
+                    await signOut(auth);
+                    elements.authError.innerText = "허용되지 않은 이메일입니다.";
+                    elements.authError.classList.remove('hidden');
+                } else {
+                    // 인증 성공, 복호화 키 가져오기
+                    const configDoc = await getDoc(doc(db, "settings", "config"));
+                    const fetchedPassword = configDoc.exists() ? configDoc.data().masterPassword : null;
+                    
+                    if (!fetchedPassword) {
+                        console.error("복호화 키를 찾을 수 없습니다.");
+                        elements.authError.innerText = "복호화 설정 오류.";
+                        elements.authError.classList.remove('hidden');
+                        return;
+                    }
+
+                    currentMasterPassword = fetchedPassword;
+                    elements.loginOverlay.classList.add('hidden');
+                    autoLoadData(fetchedPassword); 
+                }
+            } catch (err) {
+                console.error("Login Error:", err);
+                elements.authError.innerText = "로그인 실패: " + err.message;
+                elements.authError.classList.remove('hidden');
+            }
+        };
+
+        window.firebaseLogout = async () => {
+            await signOut(auth);
+            location.reload();
+        };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                try {
+                    const docRef = doc(db, "allowed_emails", user.email);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const configDoc = await getDoc(doc(db, "settings", "config"));
+                        currentMasterPassword = configDoc.exists() ? configDoc.data().masterPassword : null;
+                        elements.loginOverlay.classList.add('hidden');
+                        await autoLoadData(currentMasterPassword);
+                    } else {
+                        await signOut(auth);
+                        document.getElementById('loadingOverlay').classList.add('hidden');
+                    }
+                } catch (err) {
+                    console.error("Auth state check error:", err);
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                }
+            } else {
+                document.getElementById('loadingOverlay').classList.add('hidden');
+                elements.loginOverlay.classList.remove('hidden');
+                elements.app.classList.add('hidden');
+            }
+        });
+        // ↑ module 블록에서 autoLoadData 중복 정의 제거됨
+    </script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        theseusGold: '#bc9640',
+                        theseusGoldLight: '#c8ab69',
+                        bgPrimary: '#ffffff',
+                        bgSecondary: '#f2f3f5',
+                        borderPrimary: '#e6ecf0',
+                        textSecondary: '#5c646b',
+                        darkBg: '#191b22',
+                        darkCard: '#282c37',
+                        darkBorder: '#393f4f'
+                    },
+                    fontFamily: {
+                        sans: ['mastodon-font-sans-serif', 'Inter', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: mastodon-font-sans-serif, sans-serif; background-color: #ffffff; }
+        .dark body { background-color: #191b22; }
+
+        .sidebar-item { padding: 10px 15px; display: flex; align-items: center; gap: 12px; cursor: pointer; border-bottom: 1px solid transparent; }
+        .sidebar-item:hover { background-color: #f2f3f5; }
+        .dark .sidebar-item:hover { background-color: #2b2f3b; }
+        .sidebar-item.active { background-color: #ffffff; border-left: 4px solid #bc9640; }
+        .dark .sidebar-item.active { background-color: #282c37; border-left: 4px solid #bc9640; }
+
+        .avatar-circle { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: none !important; background: transparent !important; }
+        .avatar-sm { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: none !important; background: transparent !important; }
+
+        .status-card { background-color: #ffffff; border-bottom: 1px solid #e6ecf0; padding: 16px; display: flex; gap: 12px; cursor: pointer; }
+        .dark .status-card { background-color: #191b22; border-bottom: 1px solid #393f4f; }
+        .status-card:hover { background-color: #f7f9fa; }
+        .dark .status-card:hover { background-color: #1f232b; }
+
+        .display-name { font-weight: 700; color: #000; font-size: 15px; }
+        .dark .display-name { color: #fff; }
+        .username { color: #5c646b; font-size: 14px; }
+        .timestamp { color: #5c646b; font-size: 14px; }
+
+        .status-content { font-size: 15px; line-height: 1.5; margin-top: 4px; color: #000; word-break: break-word; }
+        .dark .status-content { color: #d9e1e8; }
+        .status-content a { color: #bc9640; text-decoration: none; }
+        .status-content a:hover { text-decoration: underline; }
+
+        .media-item { width: 100%; height: auto; max-height: 600px; object-fit: contain; background-color: #000; border-radius: 4px; margin-top: 10px; }
+        .cw-fixed-label { display: block; background: rgba(188, 150, 64, 0.1); border: 1px solid rgba(188, 150, 64, 0.3); border-radius: 4px; padding: 4px 10px; font-size: 13px; font-weight: 700; color: #bc9640; margin-bottom: 8px; }
+        .dark .cw-fixed-label { background: rgba(200, 171, 105, 0.15); border: 1px solid rgba(200, 171, 105, 0.4); color: #c8ab69; }
+
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d1d9e1; border-radius: 5px; }
+        .dark ::-webkit-scrollbar-thumb { background: #393f4f; }
+    </style>
+</head>
+<body class="transition-colors duration-200">
+    <!-- 로딩 오버레이 -->
+    <div id="loadingOverlay" class="fixed inset-0 z-[70] bg-white/70 dark:bg-[#191b22]/70 backdrop-blur-sm flex items-center justify-center">
+        <div class="text-xl font-bold dark:text-white"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading...</div>
+    </div>
+
+    <!-- 통합 인증(로그인) 오버레이 -->
+    <div id="loginOverlay" class="fixed inset-0 z-[60] bg-[#f2f3f5] dark:bg-darkBg flex items-center justify-center p-4 hidden">
+        <div class="max-w-md w-full p-10 bg-white dark:bg-darkCard rounded-3xl shadow-2xl text-center">
+            <h2 id="authTitle" class="text-2xl font-black mb-6 dark:text-white uppercase tracking-tight">Drift 0020 *reprise Archive</h2>
+            
+            <div id="loginForm" class="space-y-4">
+                <button onclick="handleGoogleLogin()" id="loginBtn" class="w-full bg-white dark:bg-gray-800 border dark:border-gray-700 text-gray-700 dark:text-white py-3 rounded-xl font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                    <i class="fa-brands fa-google mr-2"></i> Google로 로그인
+                </button>
+            </div>
+
+            <p id="authError" class="mt-4 text-red-500 text-sm font-bold hidden"></p>
+        </div>
+    </div>
+
+    <div id="app" class="flex h-screen overflow-hidden hidden">
+        <aside class="w-[350px] flex-shrink-0 border-r border-borderPrimary dark:border-darkBorder bg-[#f2f3f5] dark:bg-darkCard flex flex-col">
+            <div class="h-[75px] flex items-center justify-between px-5 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder">
+                <div class="flex flex-col cursor-pointer" onclick="goHome()">
+                    <span class="font-black text-xl tracking-tight dark:text-white leading-tight">Drift 0020 <span class="text-theseusGold">*reprise</span> <span class="text-xs font-medium text-gray-400 ml-1">archive</span></span>
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">by Amrak Amrahd<br><span id="headerTimestamp" class="text-[9px] font-normal opacity-80 normal-case">2026-06-07 15:40</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="firebaseLogout()" title="로그아웃" class="text-gray-400 hover:text-red-500 transition-colors"><i class="fa-solid fa-right-from-bracket"></i></button>
+                    <button id="themeToggle" class="w-10 h-10 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center">
+                        <i class="fa-solid fa-moon dark:hidden text-gray-600"></i>
+                        <i class="fa-solid fa-sun hidden dark:inline icon-gold"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-4 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder">
+                <div class="relative">
+                    <i class="fa-solid fa-search absolute left-4 top-3.5 text-gray-400 text-sm"></i>
+                    <input type="text" id="userSearch" placeholder="유저 필터..." class="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border-none rounded-full text-sm focus:ring-1 focus:ring-theseusGold dark:text-white transition-all">
+                </div>
+            </div>
+            <nav class="flex-1 overflow-y-auto pt-2" id="userList"></nav>
+        </aside>
+
+        <main class="flex-1 flex flex-col min-w-0 bg-[#ffffff] dark:bg-[#191b22]">
+            <header class="h-[60px] flex items-center px-6 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder sticky top-0 z-10">
+                <div class="flex-1 max-w-2xl relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-3 text-gray-400"></i>
+                    <input type="text" id="statusSearch" placeholder="공학부 from:@amrak since:2026-03-14 until:2026-04-12" class="w-full pl-11 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border-none rounded-full text-sm focus:ring-1 focus:ring-theseusGold dark:text-white transition-all">
+                </div>
+            </header>
+            <div class="flex-1 overflow-y-auto" id="timeline">
+                <div id="statusContainer"></div>
+                <div id="sentinel" class="h-40"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="threadModal" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 hidden" onclick="closeThreadModal()">
+        <div class="bg-white dark:bg-darkCard w-full max-w-2xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-colors" onclick="event.stopPropagation()">
+            <div class="px-6 py-4 border-b border-borderPrimary dark:border-darkBorder flex items-center justify-between">
+                <h3 class="text-lg font-black dark:text-white"><i class="fa-solid fa-comments text-theseusGold mr-2"></i>스레드</h3>
+                <button onclick="closeThreadModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div id="modalContent" class="flex-1 overflow-y-auto p-4 bg-[#f2f3f5] dark:bg-darkBg space-y-px">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allData = { users: [], statuses: [] };
+        let filteredStatuses = [];
+        let displayedCount = 0;
+        const PAGE_SIZE = 50;
+        let selectedUserId = null;
+        let searchTerm = '';
+        let currentObserver = null; 
+        let currentMasterPassword = null;
+
+        const statusMap = new Map();
+        const replyMap = new Map();
+        const avatarCache = new Map();
+
+        const elements = {
+            loginOverlay: document.getElementById('loginOverlay'),
+            authTitle: document.getElementById('authTitle'),
+            loginForm: document.getElementById('loginForm'),
+            signupForm: document.getElementById('signupForm'),
+            authError: document.getElementById('authError'),
+            loginId: document.getElementById('loginId'), loginPw: document.getElementById('loginPw'),
+            signupId: document.getElementById('signupId'), signupPw: document.getElementById('signupPw'), signupInvite: document.getElementById('signupInvite'),
+            userList: document.getElementById('userList'), timeline: document.getElementById('timeline'),
+            statusContainer: document.getElementById('statusContainer'), themeToggle: document.getElementById('themeToggle'),
+            statusSearch: document.getElementById('statusSearch'), userSearch: document.getElementById('userSearch'),
+            sentinel: document.getElementById('sentinel'), app: document.getElementById('app'),
+            threadModal: document.getElementById('threadModal'), modalContent: document.getElementById('modalContent')
+        };
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+            // loadingOverlay는 인증 체크 완료 후 숨겨져야 하므로 여기서 바로 숨기지 않음
+        });
+
+        function toggleAuthMode(isSignup) {
+            elements.authError.classList.add('hidden');
+            if (isSignup) {
+                elements.authTitle.innerText = "Create Account";
+                elements.loginForm.classList.add('hidden');
+                elements.signupForm.classList.remove('hidden');
+            } else {
+                elements.authTitle.innerText = "Drift 0020 *reprise Archive";
+                elements.loginForm.classList.remove('hidden');
+                elements.signupForm.classList.add('hidden');
+            }
+        }
+
+        async function handleManualLogin() {
+            const id = elements.loginId.value.trim();
+            const pw = elements.loginPw.value.trim();
+            if (!id || !pw) return;
+
+            const res = await window.firebaseLogin(id, pw);
+            if (res.success) {
+                currentMasterPassword = res.masterPassword;
+                elements.loginOverlay.classList.add('hidden');
+                autoLoadData();
+            } else {
+                elements.authError.innerText = res.message;
+                elements.authError.classList.remove('hidden');
+            }
+        }
+
+        async function handleManualSignup() {
+            const id = elements.signupId.value.trim();
+            const pw = elements.signupPw.value.trim();
+            const invite = elements.signupInvite.value.trim();
+            if (!id || !pw || !invite) return;
+
+            const res = await window.firebaseSignup(id, pw, invite);
+            if (res.success) {
+                alert("가입 성공! 이제 방금 만든 계정으로 로그인해 주세요.");
+                toggleAuthMode(false);
+            } else {
+                elements.authError.innerText = res.message;
+                elements.authError.classList.remove('hidden');
+            }
+        }
+
+        // ✅ 수정됨: window.location.href 기준 절대경로 사용 (GitHub Pages 서브디렉토리 대응)
+        window.autoLoadData = async function(password) {
+            const pwd = password || currentMasterPassword;
+            if (!pwd) {
+                console.error("복호화 키가 없습니다.");
+                return;
+            }
+            try {
+                const fetchOptions = { cache: 'no-store' };
+                const base = new URL('./', window.location.href).href;
+
+                const response1 = await fetch(base + 'scripts/data_part1.enc?t=' + Date.now(), fetchOptions);
+                const response2 = await fetch(base + 'scripts/data_part2.enc?t=' + Date.now(), fetchOptions);
+                
+                if (!response1.ok || !response2.ok) {
+                    console.error("파일 로드 상태:", response1.status, response2.status);
+                    throw new Error("data_part 파일을 찾을 수 없습니다.");
+                }
+                
+                const blob1 = await response1.blob();
+                const blob2 = await response2.blob();
+                
+                const combinedBlob = new Blob([blob1, blob2]);
+                const combinedBuffer = await combinedBlob.arrayBuffer();
+                
+                const decryptedBuffer = await decryptMainData(combinedBuffer, pwd);
+                
+                const blob = new Blob([decryptedBuffer]);
+                const ds = new DecompressionStream('deflate');
+                const stream = blob.stream().pipeThrough(ds);
+                const decompressedBuffer = await new Response(stream).arrayBuffer();
+                
+                const decryptedText = new TextDecoder().decode(decompressedBuffer);
+                allData = JSON.parse(decryptedText);
+                
+                buildThreadIndex(allData.statuses);
+                
+                document.getElementById('loadingOverlay').classList.add('hidden');
+                elements.app.classList.remove('hidden');
+                
+                applyFilters();
+                renderUserList();
+            } catch (err) {
+                console.error("Data Load/Decrypt Error:", err);
+                document.getElementById('loadingOverlay').classList.add('hidden');
+            }
+        };
+
+        async function decryptMainData(buffer, password) {
+            const encoder = new TextEncoder();
+            const keyData = await crypto.subtle.digest('SHA-256', encoder.encode(password));
+            
+            const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'AES-GCM' }, false, ['decrypt']);
+            
+            const nonce = buffer.slice(0, 16);   // 파이썬 GCM 기본 nonce 16바이트
+            const tag = buffer.slice(16, 32);    // tag 16바이트
+            const ciphertext = buffer.slice(32); // 나머지 암호문
+
+            // WebCrypto는 ciphertext 뒤에 tag가 붙은 형태를 기대함
+            const combined = new Uint8Array(ciphertext.byteLength + tag.byteLength);
+            combined.set(new Uint8Array(ciphertext), 0);
+            combined.set(new Uint8Array(tag), ciphertext.byteLength);
+
+            try {
+                const decrypted = await crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv: nonce, tagLength: 128 }, // tagLength 명시 (파이썬 기본값과 일치)
+                    cryptoKey,
+                    combined
+                );
+                return new Uint8Array(decrypted);
+            } catch (e) {
+                console.error("복호화 상세 오류:", e);
+                throw e;
+            }
+        }
+
+        function buildThreadIndex(statuses) {
+            statusMap.clear(); replyMap.clear();
+            statuses.forEach(s => {
+                if (!s || s.id === undefined) return;
+                const nid = String(s.id).trim(); statusMap.set(nid, s);
+                const pid = s.in_reply_to_id || s.reply_to || (s.status && s.status.in_reply_to_id);
+                if (pid) {
+                    const npid = String(pid).trim();
+                    if (!replyMap.has(npid)) replyMap.set(npid, []);
+                    replyMap.get(npid).push(s);
+                }
+            });
+        }
+
+        function applyFilters() {
+            if (currentObserver) { currentObserver.unobserve(elements.sentinel); currentObserver = null; }
+            const f = parseSearch(searchTerm);
+            filteredStatuses = allData.statuses.filter(s => {
+                if (selectedUserId && s.user_id !== selectedUserId) return false;
+                if (f.from && s.user?.username.toLowerCase() !== f.from) return false;
+                if (f.since && new Date(s.created_at) < f.since) return false;
+                if (f.until && new Date(s.created_at) > f.until) return false;
+                
+                if (f.qArray.length > 0) {
+                    const content = s.content.toLowerCase();
+                    for (const word of f.qArray) {
+                        if (!content.includes(word)) return false;
+                    }
+                }
+                return true;
+            });
+            displayedCount = 0; elements.statusContainer.innerHTML = ''; elements.timeline.scrollTo({ top: 0 });
+            loadMore(); bindNewObserver();
+        }
+
+        function parseSearch(text) {
+            const f = { from: null, since: null, until: null, qArray: [] };
+            
+            let query = text;
+            const mFrom = text.match(/from:(\S+)/i); 
+            if (mFrom) { f.from = mFrom[1].replace('@','').toLowerCase(); query = query.replace(mFrom[0], ''); }
+            const mSince = text.match(/since:(\d{4}-\d{2}-\d{2})/i); 
+            if (mSince) { f.since = new Date(mSince[1]); query = query.replace(mSince[0], ''); }
+            const mUntil = text.match(/until:(\d{4}-\d{2}-\d{2})/i); 
+            if (mUntil) { f.until = new Date(mUntil[1]); query = query.replace(mUntil[0], ''); }
+            
+            f.qArray = query.trim().toLowerCase().split(/\s+/).filter(word => word.length > 0);
+            return f;
+        }
+
+        function bindNewObserver() {
+            currentObserver = new IntersectionObserver(entries => { if (entries[0].isIntersecting) loadMore(); }, { root: elements.timeline, threshold: 0.1 });
+            currentObserver.observe(elements.sentinel);
+        }
+
+        function renderUserList(filter = '') {
+            const query = filter.toLowerCase();
+            const users = allData.users.filter(u => u.username.toLowerCase().includes(query) || u.display_name.toLowerCase().includes(query));
+            elements.userList.innerHTML = users.map(u => {
+                const avatarPath = u.local_avatar_path || ''; const isEncrypted = avatarPath.endsWith('.enc');
+                const avatarAttr = isEncrypted ? `data-encrypted-src="${avatarPath}" class="avatar-sm object-cover encrypted-media"` : `src="${avatarPath}" class="avatar-sm object-cover"`;
+                return `
+                <div onclick="filterByUser('${u.id}')" class="sidebar-item ${selectedUserId === u.id ? 'active' : ''}">
+                    <img ${avatarAttr} onerror="this.src='https://via.placeholder.com/36'">
+                    <div class="min-w-0">
+                        <div class="font-bold text-sm text-gray-800 dark:text-gray-100 truncate">${u.display_name || u.username}</div>
+                        <div class="text-xs text-gray-500 truncate">@${u.username}</div>
+                    </div>
+                </div>
+            `;}).join('');
+            observeEncryptedMedia();
+        }
+
+        function filterByUser(id) { selectedUserId = (selectedUserId === id) ? null : id; renderUserList(elements.userSearch.value); applyFilters(); }
+        function goHome() { searchTerm = ''; selectedUserId = null; elements.statusSearch.value = ''; elements.userSearch.value = ''; renderUserList(); applyFilters(); }
+
+        function createStatusHtml(s, isModalContext = false, isTarget = false) {
+            const date = new Date(s.created_at);
+            const dateStr = `${date.getFullYear()}년 ${date.getMonth()+1}월 ${date.getDate()}일 ${date.getHours()}:${date.getMinutes().toString().padStart(2,'0')}`;
+            const mediaHtml = (s.media_paths || []).map(p => {
+                const ext = p.split('.').pop().toLowerCase(); const isEncrypted = p.endsWith('.enc');
+                if (['mp4','webm','mov'].includes(ext) || (isEncrypted && p.includes('.mp4.enc'))) {
+                    return `<video ${isEncrypted ? `data-encrypted-src="${p}"` : `src="${p}"`} controls class="media-item ${isEncrypted ? 'encrypted-media' : ''}" onclick="event.stopPropagation()"></video>`;
+                } else {
+                    const clickAction = isEncrypted 
+                        ? "if(this.src) window.open(this.src)" 
+                        : `window.open('${p}')`;
+                    return `<img ${isEncrypted ? `data-encrypted-src="${p}"` : `src="${p}"`} class="media-item cursor-zoom-in ${isEncrypted ? 'encrypted-media' : ''}" onclick="event.stopPropagation(); ${clickAction}">`;
+                }
+            }).join('');
+            const avatarPath = s.user?.local_avatar_path || ''; const isAvatarEncrypted = avatarPath.endsWith('.enc');
+            
+            const borderStyle = 'border-b border-borderPrimary dark:border-darkBorder bg-white dark:bg-darkCard';
+            const paddingStyle = 'p-4';
+
+            return `
+                <div ${!isModalContext ? `id="status-${s.id}"` : ''} class="status-card ${borderStyle} ${paddingStyle}" onclick="openThreadModal(event, '${s.id}')">
+                    <img ${isAvatarEncrypted ? `data-encrypted-src="${avatarPath}"` : `src="${avatarPath}"`} class="avatar-circle flex-shrink-0 ${isAvatarEncrypted ? 'encrypted-media' : ''}" onerror="this.src='https://via.placeholder.com/48'">
+                    <div class="flex-1 min-w-0 z-10">
+                        <div class="flex items-baseline justify-between">
+                            <div class="flex items-center gap-1 truncate"><span class="display-name truncate">${s.user?.display_name || s.user?.username}</span><span class="username truncate">@${s.user?.username}</span></div>
+                            <span class="timestamp whitespace-nowrap">${dateStr}</span>
+                        </div>
+                        <div class="mt-1">
+                            ${s.spoiler_text ? `<div class="cw-fixed-label">CW: ${s.spoiler_text}</div>` : ''}
+                            <div class="status-content">${s.content}</div>${mediaHtml}
+                        </div>
+                        <div class="mt-3 flex gap-4 text-xs text-gray-500 font-bold justify-end" onclick="event.stopPropagation()">
+                            <a href="${s.url}" target="_blank" class="hover:text-theseusGold"><i class="fa-solid fa-link mr-1"></i>원본</a>
+                            ${(!isModalContext && (searchTerm || selectedUserId)) ? `<button onclick="event.stopPropagation(); jumpTo('${s.id}')" class="hover:text-theseusGold"><i class="fa-solid fa-eye mr-1"></i>타임라인 이동</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const decryptionObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const el = entry.target; const path = el.getAttribute('data-encrypted-src');
+                    if (path) { decryptAndShow(el, path); decryptionObserver.unobserve(el); }
+                }
+            });
+        }, { rootMargin: '200px' });
+
+        async function decryptAndShow(el, path) {
+            if (el.src && el.src.startsWith('blob:')) return;
+            if (!el.classList.contains('encrypted-media')) return;
+
+            if (avatarCache.has(path)) {
+                el.src = avatarCache.get(path);
+                el.classList.remove('encrypted-media');
+                el.removeAttribute('data-encrypted-src');
+                return;
+            }
+
+            // 상대경로를 절대경로로 변환
+            const base = new URL('./', window.location.href).href;
+            const absolutePath = path.startsWith('http') ? path : base + path;
+
+            try {
+                const response = await fetch(absolutePath);
+                if (!response.ok) throw new Error("파일 로드 실패: " + response.status);
+                const buffer = await response.arrayBuffer();
+                
+                const decryptedBuffer = await decryptMainData(buffer, currentMasterPassword);
+                
+                const blobUrl = URL.createObjectURL(new Blob([decryptedBuffer]));
+                
+                avatarCache.set(path, blobUrl);
+                
+                el.src = blobUrl; 
+                el.classList.remove('encrypted-media'); 
+                el.removeAttribute('data-encrypted-src');
+            } catch (err) { 
+                console.error("미디어 복호화 오류 (" + absolutePath + "):", err); 
+                el.style.opacity = '0.5'; 
+                el.title = "복호화 실패: " + err.message;
+            }
+        }
+
+        function observeEncryptedMedia() { document.querySelectorAll('.encrypted-media').forEach(el => decryptionObserver.observe(el)); }
+
+        function loadMore() {
+            const batch = filteredStatuses.slice(displayedCount, displayedCount + PAGE_SIZE); if (batch.length === 0) return;
+            const fragment = document.createDocumentFragment();
+            batch.forEach(s => { const wrapper = document.createElement('div'); wrapper.innerHTML = createStatusHtml(s, false, false); fragment.appendChild(wrapper.firstElementChild); });
+            elements.statusContainer.appendChild(fragment); displayedCount += batch.length; observeEncryptedMedia();
+        }
+
+        function openThreadModal(event, statusId) {
+            if (event) { event.preventDefault(); event.stopPropagation(); }
+            const nid = String(statusId).trim(); const targetStatus = statusMap.get(nid); if (!targetStatus) return;
+            elements.modalContent.innerHTML = ''; const parents = []; let cpid = targetStatus.in_reply_to_id || targetStatus.reply_to || (targetStatus.status && targetStatus.status.in_reply_to_id);
+            const visited = new Set([nid]);
+            while (cpid) {
+                const ncpid = String(cpid).trim(); if (visited.has(ncpid)) break; visited.add(ncpid);
+                const ps = statusMap.get(ncpid); if (ps) { parents.unshift(ps); cpid = ps.in_reply_to_id || ps.reply_to || (ps.status && ps.status.in_reply_to_id); } else break;
+            }
+            const descendants = [];
+            function findD(tid) { const children = replyMap.get(String(tid).trim()) || []; children.forEach(c => { if (!visited.has(String(c.id))) { visited.add(String(c.id)); descendants.push(c); findD(c.id); } }); }
+            findD(nid); descendants.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+            elements.modalContent.innerHTML = parents.map(p => createStatusHtml(p, true, false)).join('') + createStatusHtml(targetStatus, true, true) + descendants.map(d => createStatusHtml(d, true, false)).join('');
+            elements.threadModal.classList.remove('hidden'); document.body.style.overflow = 'hidden'; observeEncryptedMedia();
+            setTimeout(() => { const t = elements.modalContent.querySelector('.border-theseusGold'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 60);
+        }
+
+        function closeThreadModal() { elements.threadModal.classList.add('hidden'); document.body.style.overflow = ''; }
+
+        async function jumpTo(id) {
+            searchTerm = '';
+            selectedUserId = null;
+            elements.statusSearch.value = '';
+            elements.userSearch.value = '';
+            
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+
+            setTimeout(() => {
+                applyFilters();
+
+                const targetId = String(id).trim();
+                let idx = filteredStatuses.findIndex(s => String(s.id).trim() === targetId);
+
+                if (idx === -1) {
+                    alert("타임라인에서 해당 툿을 찾을 수 없습니다.");
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                    return;
+                }
+
+                elements.statusContainer.innerHTML = '';
+                displayedCount = 0;
+                
+                while (displayedCount <= idx) {
+                    const end = Math.min(displayedCount + PAGE_SIZE, filteredStatuses.length);
+                    const batch = filteredStatuses.slice(displayedCount, end);
+                    
+                    const fragment = document.createDocumentFragment();
+                    batch.forEach(s => {
+                        const wrapper = document.createElement('div');
+                        wrapper.innerHTML = createStatusHtml(s, false, false);
+                        fragment.appendChild(wrapper.firstElementChild);
+                    });
+                    elements.statusContainer.appendChild(fragment);
+                    displayedCount = end;
+                    
+                    if (displayedCount >= filteredStatuses.length) break;
+                }
+                renderUserList();
+                observeEncryptedMedia();
+
+                const el = document.getElementById(`status-${targetId}`);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'auto', block: 'center' });
+                    el.classList.add('bg-yellow-100', 'dark:bg-yellow-900');
+                    setTimeout(() => el.classList.remove('bg-yellow-100', 'dark:bg-yellow-900'), 2000);
+                }
+                document.getElementById('loadingOverlay').classList.add('hidden');
+            }, 50);
+        }
+
+        elements.statusSearch.addEventListener('keydown', e => { if (e.key === 'Enter') { searchTerm = e.target.value; applyFilters(); } });
+        elements.userSearch.addEventListener('input', e => renderUserList(e.target.value));
+        elements.themeToggle.addEventListener('click', () => { document.documentElement.classList.toggle('dark'); localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light'; });
+    </script>
+</body>
+</html>

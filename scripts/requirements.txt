@@ -1,0 +1,4 @@
+Mastodon.py
+requests
+python-dotenv
+pycryptodome

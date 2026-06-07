@@ -1,0 +1,22 @@
+# Raw media files
+media/**/*.png
+media/**/*.jpg
+media/**/*.jpeg
+media/**/*.gif
+media/**/*.mp4
+media/**/*.webm
+media/**/*.webp
+media/**/*.mov
+
+# Scripts directory - ignore sensitive and data files
+scripts/*.db
+scripts/*.db-journal
+scripts/*.json
+scripts/.env
+scripts/invite_codes.txt
+
+# Root level (if any remain)
+*.db
+*.db-journal
+.env
+data.json
