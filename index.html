@@ -33,7 +33,6 @@
                 const result = await signInWithPopup(auth, provider);
                 const email = result.user.email;
 
-                // 화이트리스트 체크
                 const docRef = doc(db, "allowed_emails", email);
                 const docSnap = await getDoc(docRef);
 
@@ -42,7 +41,6 @@
                     elements.authError.innerText = "허용되지 않은 이메일입니다.";
                     elements.authError.classList.remove('hidden');
                 } else {
-                    // 인증 성공, 복호화 키 가져오기
                     const configDoc = await getDoc(doc(db, "settings", "config"));
                     const fetchedPassword = configDoc.exists() ? configDoc.data().masterPassword : null;
                     
@@ -93,7 +91,6 @@
                 elements.app.classList.add('hidden');
             }
         });
-        // ↑ module 블록에서 autoLoadData 중복 정의 제거됨
     </script>
 
     <script>
@@ -150,6 +147,17 @@
         .media-item { width: 100%; height: auto; max-height: 600px; object-fit: contain; background-color: #000; border-radius: 4px; margin-top: 10px; }
         .cw-fixed-label { display: block; background: rgba(188, 150, 64, 0.1); border: 1px solid rgba(188, 150, 64, 0.3); border-radius: 4px; padding: 4px 10px; font-size: 13px; font-weight: 700; color: #bc9640; margin-bottom: 8px; }
         .dark .cw-fixed-label { background: rgba(200, 171, 105, 0.15); border: 1px solid rgba(200, 171, 105, 0.4); color: #c8ab69; }
+
+        /* 모달에서 선택된 원본 툿 강조 */
+        .status-card[data-modal-target="true"] {
+            background-color: #fffdf5 !important;
+            border-left: 3px solid #bc9640 !important;
+            padding-left: 13px !important;
+        }
+        .status-card[data-modal-target="true"] .display-name { font-size: 16px; }
+        .status-card[data-modal-target="true"] .status-content { font-size: 16px; }
+        .status-card[data-modal-target="true"] .avatar-circle { width: 54px; height: 54px; }
+        .dark .status-card[data-modal-target="true"] { background-color: #23201a !important; }
 
         ::-webkit-scrollbar { width: 10px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -259,11 +267,19 @@
             threadModal: document.getElementById('threadModal'), modalContent: document.getElementById('modalContent')
         };
 
+        // ── 드래그 감지: mousedown 위치를 저장해두고 click 시점에 비교 ──
+        let _mouseDownX = 0;
+        let _mouseDownY = 0;
+        document.addEventListener('mousedown', e => {
+            _mouseDownX = e.clientX;
+            _mouseDownY = e.clientY;
+        });
+        // ────────────────────────────────────────────────────────────────
+
         window.addEventListener('DOMContentLoaded', async () => {
             if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
             }
-            // loadingOverlay는 인증 체크 완료 후 숨겨져야 하므로 여기서 바로 숨기지 않음
         });
 
         function toggleAuthMode(isSignup) {
@@ -283,7 +299,6 @@
             const id = elements.loginId.value.trim();
             const pw = elements.loginPw.value.trim();
             if (!id || !pw) return;
-
             const res = await window.firebaseLogin(id, pw);
             if (res.success) {
                 currentMasterPassword = res.masterPassword;
@@ -300,7 +315,6 @@
             const pw = elements.signupPw.value.trim();
             const invite = elements.signupInvite.value.trim();
             if (!id || !pw || !invite) return;
-
             const res = await window.firebaseSignup(id, pw, invite);
             if (res.success) {
                 alert("가입 성공! 이제 방금 만든 계정으로 로그인해 주세요.");
@@ -311,46 +325,32 @@
             }
         }
 
-        // ✅ 수정됨: window.location.href 기준 절대경로 사용 (GitHub Pages 서브디렉토리 대응)
         window.autoLoadData = async function(password) {
             const pwd = password || currentMasterPassword;
-            if (!pwd) {
-                console.error("복호화 키가 없습니다.");
-                return;
-            }
+            if (!pwd) { console.error("복호화 키가 없습니다."); return; }
             try {
                 const fetchOptions = { cache: 'no-store' };
                 const base = new URL('./', window.location.href).href;
-
                 const response1 = await fetch(base + 'scripts/data_part1.enc?t=' + Date.now(), fetchOptions);
                 const response2 = await fetch(base + 'scripts/data_part2.enc?t=' + Date.now(), fetchOptions);
-                
                 if (!response1.ok || !response2.ok) {
                     console.error("파일 로드 상태:", response1.status, response2.status);
                     throw new Error("data_part 파일을 찾을 수 없습니다.");
                 }
-                
                 const blob1 = await response1.blob();
                 const blob2 = await response2.blob();
-                
                 const combinedBlob = new Blob([blob1, blob2]);
                 const combinedBuffer = await combinedBlob.arrayBuffer();
-                
                 const decryptedBuffer = await decryptMainData(combinedBuffer, pwd);
-                
                 const blob = new Blob([decryptedBuffer]);
                 const ds = new DecompressionStream('deflate');
                 const stream = blob.stream().pipeThrough(ds);
                 const decompressedBuffer = await new Response(stream).arrayBuffer();
-                
                 const decryptedText = new TextDecoder().decode(decompressedBuffer);
                 allData = JSON.parse(decryptedText);
-                
                 buildThreadIndex(allData.statuses);
-                
                 document.getElementById('loadingOverlay').classList.add('hidden');
                 elements.app.classList.remove('hidden');
-                
                 applyFilters();
                 renderUserList();
             } catch (err) {
@@ -362,21 +362,16 @@
         async function decryptMainData(buffer, password) {
             const encoder = new TextEncoder();
             const keyData = await crypto.subtle.digest('SHA-256', encoder.encode(password));
-            
             const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'AES-GCM' }, false, ['decrypt']);
-            
-            const nonce = buffer.slice(0, 16);   // 파이썬 GCM 기본 nonce 16바이트
-            const tag = buffer.slice(16, 32);    // tag 16바이트
-            const ciphertext = buffer.slice(32); // 나머지 암호문
-
-            // WebCrypto는 ciphertext 뒤에 tag가 붙은 형태를 기대함
+            const nonce = buffer.slice(0, 16);
+            const tag = buffer.slice(16, 32);
+            const ciphertext = buffer.slice(32);
             const combined = new Uint8Array(ciphertext.byteLength + tag.byteLength);
             combined.set(new Uint8Array(ciphertext), 0);
             combined.set(new Uint8Array(tag), ciphertext.byteLength);
-
             try {
                 const decrypted = await crypto.subtle.decrypt(
-                    { name: 'AES-GCM', iv: nonce, tagLength: 128 }, // tagLength 명시 (파이썬 기본값과 일치)
+                    { name: 'AES-GCM', iv: nonce, tagLength: 128 },
                     cryptoKey,
                     combined
                 );
@@ -409,12 +404,9 @@
                 if (f.from && s.user?.username.toLowerCase() !== f.from) return false;
                 if (f.since && new Date(s.created_at) < f.since) return false;
                 if (f.until && new Date(s.created_at) > f.until) return false;
-                
                 if (f.qArray.length > 0) {
                     const content = s.content.toLowerCase();
-                    for (const word of f.qArray) {
-                        if (!content.includes(word)) return false;
-                    }
+                    for (const word of f.qArray) { if (!content.includes(word)) return false; }
                 }
                 return true;
             });
@@ -424,7 +416,6 @@
 
         function parseSearch(text) {
             const f = { from: null, since: null, until: null, qArray: [] };
-            
             let query = text;
             const mFrom = text.match(/from:(\S+)/i); 
             if (mFrom) { f.from = mFrom[1].replace('@','').toLowerCase(); query = query.replace(mFrom[0], ''); }
@@ -432,7 +423,6 @@
             if (mSince) { f.since = new Date(mSince[1]); query = query.replace(mSince[0], ''); }
             const mUntil = text.match(/until:(\d{4}-\d{2}-\d{2})/i); 
             if (mUntil) { f.until = new Date(mUntil[1]); query = query.replace(mUntil[0], ''); }
-            
             f.qArray = query.trim().toLowerCase().split(/\s+/).filter(word => word.length > 0);
             return f;
         }
@@ -482,8 +472,11 @@
             const borderStyle = 'border-b border-borderPrimary dark:border-darkBorder bg-white dark:bg-darkCard';
             const paddingStyle = 'p-4';
 
+            // isTarget: 모달에서 클릭된 원본 툿 표시용 data 속성
+            const targetAttr = isTarget ? ' data-modal-target="true"' : '';
+
             return `
-                <div ${!isModalContext ? `id="status-${s.id}"` : ''} class="status-card ${borderStyle} ${paddingStyle}" onclick="openThreadModal(event, '${s.id}')">
+                <div ${!isModalContext ? `id="status-${s.id}"` : ''}${targetAttr} class="status-card ${borderStyle} ${paddingStyle}" onclick="handleStatusClick(event, '${s.id}')">
                     <img ${isAvatarEncrypted ? `data-encrypted-src="${avatarPath}"` : `src="${avatarPath}"`} class="avatar-circle flex-shrink-0 ${isAvatarEncrypted ? 'encrypted-media' : ''}" onerror="this.src='https://via.placeholder.com/48'">
                     <div class="flex-1 min-w-0 z-10">
                         <div class="flex items-baseline justify-between">
@@ -503,6 +496,21 @@
             `;
         }
 
+        // ── 드래그 블록선택 vs 순수 클릭 구분 ──────────────────────────────
+        function handleStatusClick(event, statusId) {
+            // 1) 선택된 텍스트가 있으면(드래그로 블록선택) 모달 무시
+            const sel = window.getSelection();
+            if (sel && sel.toString().length > 0) return;
+
+            // 2) mousedown ~ click 사이 커서 이동거리가 5px 초과면 드래그로 간주
+            const dx = event.clientX - _mouseDownX;
+            const dy = event.clientY - _mouseDownY;
+            if (Math.sqrt(dx * dx + dy * dy) > 5) return;
+
+            openThreadModal(event, statusId);
+        }
+        // ────────────────────────────────────────────────────────────────
+
         const decryptionObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
@@ -515,29 +523,21 @@
         async function decryptAndShow(el, path) {
             if (el.src && el.src.startsWith('blob:')) return;
             if (!el.classList.contains('encrypted-media')) return;
-
             if (avatarCache.has(path)) {
                 el.src = avatarCache.get(path);
                 el.classList.remove('encrypted-media');
                 el.removeAttribute('data-encrypted-src');
                 return;
             }
-
-            // 상대경로를 절대경로로 변환
             const base = new URL('./', window.location.href).href;
             const absolutePath = path.startsWith('http') ? path : base + path;
-
             try {
                 const response = await fetch(absolutePath);
                 if (!response.ok) throw new Error("파일 로드 실패: " + response.status);
                 const buffer = await response.arrayBuffer();
-                
                 const decryptedBuffer = await decryptMainData(buffer, currentMasterPassword);
-                
                 const blobUrl = URL.createObjectURL(new Blob([decryptedBuffer]));
-                
                 avatarCache.set(path, blobUrl);
-                
                 el.src = blobUrl; 
                 el.classList.remove('encrypted-media'); 
                 el.removeAttribute('data-encrypted-src');
@@ -559,19 +559,56 @@
 
         function openThreadModal(event, statusId) {
             if (event) { event.preventDefault(); event.stopPropagation(); }
-            const nid = String(statusId).trim(); const targetStatus = statusMap.get(nid); if (!targetStatus) return;
-            elements.modalContent.innerHTML = ''; const parents = []; let cpid = targetStatus.in_reply_to_id || targetStatus.reply_to || (targetStatus.status && targetStatus.status.in_reply_to_id);
+            const nid = String(statusId).trim();
+            const targetStatus = statusMap.get(nid);
+            if (!targetStatus) return;
+
+            elements.modalContent.innerHTML = '';
+            const parents = [];
+            let cpid = targetStatus.in_reply_to_id || targetStatus.reply_to || (targetStatus.status && targetStatus.status.in_reply_to_id);
             const visited = new Set([nid]);
+
             while (cpid) {
-                const ncpid = String(cpid).trim(); if (visited.has(ncpid)) break; visited.add(ncpid);
-                const ps = statusMap.get(ncpid); if (ps) { parents.unshift(ps); cpid = ps.in_reply_to_id || ps.reply_to || (ps.status && ps.status.in_reply_to_id); } else break;
+                const ncpid = String(cpid).trim();
+                if (visited.has(ncpid)) break;
+                visited.add(ncpid);
+                const ps = statusMap.get(ncpid);
+                if (ps) { parents.unshift(ps); cpid = ps.in_reply_to_id || ps.reply_to || (ps.status && ps.status.in_reply_to_id); }
+                else break;
             }
+
             const descendants = [];
-            function findD(tid) { const children = replyMap.get(String(tid).trim()) || []; children.forEach(c => { if (!visited.has(String(c.id))) { visited.add(String(c.id)); descendants.push(c); findD(c.id); } }); }
-            findD(nid); descendants.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
-            elements.modalContent.innerHTML = parents.map(p => createStatusHtml(p, true, false)).join('') + createStatusHtml(targetStatus, true, true) + descendants.map(d => createStatusHtml(d, true, false)).join('');
-            elements.threadModal.classList.remove('hidden'); document.body.style.overflow = 'hidden'; observeEncryptedMedia();
-            setTimeout(() => { const t = elements.modalContent.querySelector('.border-theseusGold'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 60);
+            function findD(tid) {
+                const children = replyMap.get(String(tid).trim()) || [];
+                children.forEach(c => {
+                    if (!visited.has(String(c.id))) {
+                        visited.add(String(c.id));
+                        descendants.push(c);
+                        findD(c.id);
+                    }
+                });
+            }
+            findD(nid);
+            descendants.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+            elements.modalContent.innerHTML =
+                parents.map(p => createStatusHtml(p, true, false)).join('') +
+                createStatusHtml(targetStatus, true, true) +
+                descendants.map(d => createStatusHtml(d, true, false)).join('');
+
+            elements.threadModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+            observeEncryptedMedia();
+
+            // 클릭한 툿(data-modal-target="true")이 모달 스크롤 영역 맨 위에 오도록
+            setTimeout(() => {
+                const targetEl = elements.modalContent.querySelector('[data-modal-target="true"]');
+                if (targetEl) {
+                    targetEl.scrollIntoView({ behavior: 'instant', block: 'start' });
+                    // 위쪽에 약간의 여백(12px)을 추가
+                    elements.modalContent.scrollTop = Math.max(0, elements.modalContent.scrollTop - 12);
+                }
+            }, 60);
         }
 
         function closeThreadModal() { elements.threadModal.classList.add('hidden'); document.body.style.overflow = ''; }
@@ -581,28 +618,21 @@
             selectedUserId = null;
             elements.statusSearch.value = '';
             elements.userSearch.value = '';
-            
             document.getElementById('loadingOverlay').classList.remove('hidden');
-
             setTimeout(() => {
                 applyFilters();
-
                 const targetId = String(id).trim();
                 let idx = filteredStatuses.findIndex(s => String(s.id).trim() === targetId);
-
                 if (idx === -1) {
                     alert("타임라인에서 해당 툿을 찾을 수 없습니다.");
                     document.getElementById('loadingOverlay').classList.add('hidden');
                     return;
                 }
-
                 elements.statusContainer.innerHTML = '';
                 displayedCount = 0;
-                
                 while (displayedCount <= idx) {
                     const end = Math.min(displayedCount + PAGE_SIZE, filteredStatuses.length);
                     const batch = filteredStatuses.slice(displayedCount, end);
-                    
                     const fragment = document.createDocumentFragment();
                     batch.forEach(s => {
                         const wrapper = document.createElement('div');
@@ -611,12 +641,10 @@
                     });
                     elements.statusContainer.appendChild(fragment);
                     displayedCount = end;
-                    
                     if (displayedCount >= filteredStatuses.length) break;
                 }
                 renderUserList();
                 observeEncryptedMedia();
-
                 const el = document.getElementById(`status-${targetId}`);
                 if (el) {
                     el.scrollIntoView({ behavior: 'auto', block: 'center' });
