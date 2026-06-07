@@ -164,6 +164,10 @@
         ::-webkit-scrollbar-thumb { background: #d1d9e1; border-radius: 5px; }
         .dark ::-webkit-scrollbar-thumb { background: #393f4f; }
 
+        /* 모달 콘텐츠 텍스트 선택 항상 허용 */
+        #modalContent, #modalContent * { user-select: text !important; }
+        .resize-handle { user-select: none; }
+
         /* 라이트박스 */
         #lightbox { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.92); align-items: center; justify-content: center; cursor: zoom-out; }
         #lightbox.open { display: flex; }
@@ -204,7 +208,7 @@
             <div class="h-[75px] flex items-center justify-between px-5 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder">
                 <div class="flex flex-col cursor-pointer" onclick="goHome()">
                     <span class="font-black text-xl tracking-tight dark:text-white leading-tight">Drift 0020 <span class="text-theseusGold">*reprise</span> <span class="text-xs font-medium text-gray-400 ml-1">archive</span></span>
-                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">by Amrak Amrahd<br><span id="headerTimestamp" class="text-[9px] font-normal opacity-80 normal-case">v2026-06-08 00:00</span></span>
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">by Amrak Amrahd<br><span id="headerTimestamp" class="text-[9px] font-normal opacity-80 normal-case">2026-06-08 00:20</span></span>
                 </div>
                 <div class="flex items-center gap-2">
                     <button onclick="firebaseLogout()" title="로그아웃" class="text-gray-400 hover:text-red-500 transition-colors"><i class="fa-solid fa-right-from-bracket"></i></button>
@@ -644,14 +648,14 @@
                     const r = box.getBoundingClientRect();
                     startW = r.width; startH = r.height;
                     startL = r.left; startT = r.top;
-                    // px 고정
                     box.style.width = startW + 'px';
                     box.style.height = startH + 'px';
                     box.style.margin = '0';
                     box.style.position = 'absolute';
                     box.style.left = startL + 'px';
                     box.style.top  = startT + 'px';
-                    document.body.style.userSelect = 'none';
+                    // userSelect은 box에만, 콘텐츠 영역은 항상 선택 가능
+                    box.style.userSelect = 'none';
                 });
             });
 
@@ -676,7 +680,10 @@
             });
 
             document.addEventListener('mouseup', () => {
-                if (resizing) { resizing = false; document.body.style.userSelect = ''; }
+                if (resizing) {
+                    resizing = false;
+                    box.style.userSelect = '';
+                }
             });
         })();
         // ────────────────────────────────────────────────────────────────
