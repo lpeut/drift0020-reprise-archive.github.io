@@ -163,9 +163,22 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #d1d9e1; border-radius: 5px; }
         .dark ::-webkit-scrollbar-thumb { background: #393f4f; }
+
+        /* 라이트박스 */
+        #lightbox { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.92); align-items: center; justify-content: center; cursor: zoom-out; }
+        #lightbox.open { display: flex; }
+        #lightbox img { max-width: 92vw; max-height: 92vh; object-fit: contain; border-radius: 6px; box-shadow: 0 8px 40px rgba(0,0,0,0.6); cursor: default; }
+        #lightboxClose { position: absolute; top: 18px; right: 22px; color: #fff; font-size: 28px; cursor: pointer; opacity: 0.8; line-height: 1; }
+        #lightboxClose:hover { opacity: 1; }
     </style>
 </head>
 <body class="transition-colors duration-200">
+    <!-- 라이트박스 -->
+    <div id="lightbox" onclick="closeLightbox()">
+        <span id="lightboxClose" onclick="closeLightbox()"><i class="fa-solid fa-xmark"></i></span>
+        <img id="lightboxImg" src="" onclick="event.stopPropagation()">
+    </div>
+
     <!-- 로딩 오버레이 -->
     <div id="loadingOverlay" class="fixed inset-0 z-[70] bg-white/70 dark:bg-[#191b22]/70 backdrop-blur-sm flex items-center justify-center">
         <div class="text-xl font-bold dark:text-white"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading...</div>
@@ -461,10 +474,7 @@
                 if (['mp4','webm','mov'].includes(ext) || (isEncrypted && p.includes('.mp4.enc'))) {
                     return `<video ${isEncrypted ? `data-encrypted-src="${p}"` : `src="${p}"`} controls class="media-item ${isEncrypted ? 'encrypted-media' : ''}" onclick="event.stopPropagation()"></video>`;
                 } else {
-                    const clickAction = isEncrypted 
-                        ? "if(this.src) window.open(this.src)" 
-                        : `window.open('${p}')`;
-                    return `<img ${isEncrypted ? `data-encrypted-src="${p}"` : `src="${p}"`} class="media-item cursor-zoom-in ${isEncrypted ? 'encrypted-media' : ''}" onclick="event.stopPropagation(); ${clickAction}">`;
+                    return `<img ${isEncrypted ? `data-encrypted-src="${p}"` : `src="${p}"`} class="media-item cursor-zoom-in ${isEncrypted ? 'encrypted-media' : ''}" onclick="event.stopPropagation(); openLightbox(this)">`;
                 }
             }).join('');
             const avatarPath = s.user?.local_avatar_path || ''; const isAvatarEncrypted = avatarPath.endsWith('.enc');
@@ -612,6 +622,31 @@
         }
 
         function closeThreadModal() { elements.threadModal.classList.add('hidden'); document.body.style.overflow = ''; }
+
+        function openLightbox(imgEl) {
+            const src = imgEl.src;
+            if (!src || src.startsWith('data:') === false && !src.startsWith('blob:') && !src.startsWith('http')) return;
+            const lb = document.getElementById('lightbox');
+            const lbImg = document.getElementById('lightboxImg');
+            lbImg.src = src;
+            lb.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeLightbox() {
+            const lb = document.getElementById('lightbox');
+            lb.classList.remove('open');
+            document.getElementById('lightboxImg').src = '';
+            document.body.style.overflow = '';
+        }
+
+        // ESC 키로 라이트박스 닫기
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                closeLightbox();
+                closeThreadModal();
+            }
+        });
 
         async function jumpTo(id) {
             searchTerm = '';
