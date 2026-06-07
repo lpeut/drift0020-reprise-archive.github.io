@@ -204,19 +204,13 @@
     </div>
 
     <div id="app" class="flex h-screen overflow-hidden hidden">
-        <aside class="w-[350px] flex-shrink-0 border-r border-borderPrimary dark:border-darkBorder bg-[#f2f3f5] dark:bg-darkCard flex flex-col">
+        <aside id="sidebar" class="flex-shrink-0 border-r border-borderPrimary dark:border-darkBorder bg-[#f2f3f5] dark:bg-darkCard flex flex-col" style="width: 280px; min-width: 200px; max-width: 600px;">
             <div class="h-[75px] flex items-center justify-between px-5 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder">
                 <div class="flex flex-col cursor-pointer" onclick="goHome()">
                     <span class="font-black text-xl tracking-tight dark:text-white leading-tight">Drift 0020 <span class="text-theseusGold">*reprise</span> <span class="text-xs font-medium text-gray-400 ml-1">archive</span></span>
-                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">by Amrak Amrahd<br><span id="headerTimestamp" class="text-[9px] font-normal opacity-80 normal-case">2026-06-08 00:20</span></span>
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">by Amrak Amrahd<br><span id="headerTimestamp" class="text-[9px] font-normal opacity-80 normal-case">2026-06-08 00:50</span></span>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button onclick="firebaseLogout()" title="로그아웃" class="text-gray-400 hover:text-red-500 transition-colors"><i class="fa-solid fa-right-from-bracket"></i></button>
-                    <button id="themeToggle" class="w-10 h-10 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center">
-                        <i class="fa-solid fa-moon dark:hidden text-gray-600"></i>
-                        <i class="fa-solid fa-sun hidden dark:inline icon-gold"></i>
-                    </button>
-                </div>
+
             </div>
             
             <div class="p-4 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder">
@@ -228,11 +222,24 @@
             <nav class="flex-1 overflow-y-auto pt-2" id="userList"></nav>
         </aside>
 
+        <!-- 드래그 핸들 -->
+        <div id="resizer" class="w-0.5 cursor-col-resize hover:bg-theseusGold transition-colors bg-borderPrimary dark:bg-darkBorder z-20"></div>
+
         <main class="flex-1 flex flex-col min-w-0 bg-[#ffffff] dark:bg-[#191b22]">
             <header class="h-[60px] flex items-center px-6 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder sticky top-0 z-10">
                 <div class="flex-1 max-w-2xl relative">
                     <i class="fa-solid fa-magnifying-glass absolute left-4 top-3 text-gray-400"></i>
                     <input type="text" id="statusSearch" placeholder="공학부 from:@amrak since:2026-03-14 until:2026-04-12" class="w-full pl-11 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border-none rounded-full text-sm focus:ring-1 focus:ring-theseusGold dark:text-white transition-all">
+                </div>
+                <div class="flex items-center gap-4 ml-auto">
+                    <button id="themeToggle" class="hover:text-theseusGold transition-colors flex items-center gap-2 font-bold text-sm text-gray-500">
+                        <i class="fa-solid fa-sun dark:hidden"></i>
+                        <i class="fa-solid fa-moon hidden dark:inline"></i>
+                        <span>테마</span>
+                    </button>
+                    <button onclick="firebaseLogout()" title="로그아웃" class="text-gray-500 hover:text-red-500 transition-colors flex items-center gap-2 font-bold text-sm">
+                        <i class="fa-solid fa-right-from-bracket"></i> 로그아웃
+                    </button>
                 </div>
             </header>
             <div class="flex-1 overflow-y-auto" id="timeline">
@@ -511,7 +518,7 @@
                             <div class="status-content">${s.content}</div>${mediaHtml}
                         </div>
                         <div class="mt-3 flex gap-4 text-xs text-gray-500 font-bold justify-end" onclick="event.stopPropagation()">
-                            <a href="${s.url}" target="_blank" class="hover:text-theseusGold"><i class="fa-solid fa-link mr-1"></i>원본</a>
+                            <a href="${s.url}" target="_blank" class="hover:text-theseusGold"><i class="fa-solid fa-link"></i></a>
                             ${(!isModalContext && (searchTerm || selectedUserId)) ? `<button onclick="event.stopPropagation(); jumpTo('${s.id}')" class="hover:text-theseusGold"><i class="fa-solid fa-eye mr-1"></i>타임라인 이동</button>` : ''}
                         </div>
                     </div>
@@ -771,6 +778,34 @@
         elements.statusSearch.addEventListener('keydown', e => { if (e.key === 'Enter') { searchTerm = e.target.value; applyFilters(); } });
         elements.userSearch.addEventListener('input', e => renderUserList(e.target.value));
         elements.themeToggle.addEventListener('click', () => { document.documentElement.classList.toggle('dark'); localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light'; });
+
+        // ── 사이드바 리사이즈 ──────────────────────────────────────────
+        const resizer = document.getElementById('resizer');
+        const sidebar = document.getElementById('sidebar');
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = e.clientX;
+            if (newWidth > 200 && newWidth < 600) {
+                sidebar.style.width = newWidth + 'px';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+        // ────────────────────────────────────────────────────────────────
     </script>
 </body>
 </html>
