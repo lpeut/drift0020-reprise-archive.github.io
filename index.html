@@ -451,10 +451,9 @@
             const pwd = password || currentMasterPassword;
             if (!pwd) { console.error("복호화 키가 없습니다."); return; }
             try {
-                const fetchOptions = { cache: 'no-store' };
                 const base = new URL('./', window.location.href).href;
-                const response1 = await fetch(base + 'scripts/data_part1.enc?t=' + Date.now(), fetchOptions);
-                const response2 = await fetch(base + 'scripts/data_part2.enc?t=' + Date.now(), fetchOptions);
+                const response1 = await fetch(base + 'scripts/data_part1.enc');
+                const response2 = await fetch(base + 'scripts/data_part2.enc');
                 if (!response1.ok || !response2.ok) {
                     console.error("파일 로드 상태:", response1.status, response2.status);
                     throw new Error("data_part 파일을 찾을 수 없습니다.");
