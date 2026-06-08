@@ -148,6 +148,50 @@
         .cw-fixed-label { display: block; background: rgba(188, 150, 64, 0.1); border: 1px solid rgba(188, 150, 64, 0.3); border-radius: 4px; padding: 4px 10px; font-size: 13px; font-weight: 700; color: #bc9640; margin-bottom: 8px; }
         .dark .cw-fixed-label { background: rgba(200, 171, 105, 0.15); border: 1px solid rgba(200, 171, 105, 0.4); color: #c8ab69; }
 
+        /* 사이드바 스타일 및 반응형 (데스크톱 기본) */
+        #sidebar { width: 280px; transition: all 0.3s ease; }
+        #mainContent { margin-left: 280px; transition: all 0.3s ease; }
+
+        /* 데스크톱 미니 사이드바 (768px ~ 1200px 사이 자동) */
+        @media (min-width: 768px) and (max-width: 1200px) {
+            #sidebar { width: 72px !important; }
+            #mainContent { margin-left: 72px !important; }
+            #sidebarFullHeader { display: none !important; }
+            #sidebarMiniHeader { display: flex !important; }
+            #userSearchContainer { display: none !important; }
+            .sidebar-item { justify-content: center; padding: 10px 0; gap: 0; }
+            .sidebar-item .min-w-0 { display: none !important; }
+            #sidebarCloseBtn { display: none !important; }
+        }
+
+        /* 데스크톱 사이드바 숨김 (토글 시) */
+        @media (min-width: 768px) {
+            body.sidebar-toggled #sidebar { transform: translateX(-100%); }
+            body.sidebar-toggled #mainContent { margin-left: 0 !important; }
+        }
+
+        /* 모바일 최적화 (768px 미만) */
+        @media (max-width: 767px) {
+            #sidebar { 
+                width: 280px !important; 
+                transform: translateX(-100%);
+                z-index: 50;
+            }
+            #mainContent { margin-left: 0 !important; }
+            
+            /* 모바일에서 토글되었을 때 (보임) */
+            body.sidebar-toggled #sidebar { 
+                transform: translateX(0); 
+            }
+            body.sidebar-toggled #sidebarOverlay { 
+                display: block !important; 
+                z-index: 45; 
+            }
+
+            /* 모바일 헤더 버튼 텍스트 숨김 */
+            .header-btn-text { display: none !important; }
+        }
+
         /* 모달에서 선택된 원본 툿 강조 */
         .status-card[data-modal-target="true"] {
             background-color: #fffdf5 !important;
@@ -188,6 +232,17 @@
         <div class="text-xl font-bold dark:text-white"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading...</div>
     </div>
 
+    <!-- 로그아웃 확인 모달 -->
+    <div id="logoutModal" class="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center hidden" onclick="closeLogoutModal()">
+        <div class="bg-white dark:bg-darkCard p-8 rounded-3xl shadow-2xl max-w-sm w-full mx-4" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-black dark:text-white mb-6 text-center">로그아웃 하시겠습니까?</h3>
+            <div class="flex justify-center gap-4">
+                <button onclick="closeLogoutModal()" class="px-6 py-2.5 text-gray-500 hover:text-gray-700 font-bold transition-colors">취소</button>
+                <button onclick="confirmLogout()" class="px-6 py-2.5 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 transition-colors shadow-lg shadow-red-500/30">로그아웃</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 통합 인증(로그인) 오버레이 -->
     <div id="loginOverlay" class="fixed inset-0 z-[60] bg-[#f2f3f5] dark:bg-darkBg flex items-center justify-center p-4 hidden">
         <div class="max-w-md w-full p-10 bg-white dark:bg-darkCard rounded-3xl shadow-2xl text-center">
@@ -204,41 +259,58 @@
     </div>
 
     <div id="app" class="flex h-screen overflow-hidden hidden">
-        <aside id="sidebar" class="flex-shrink-0 border-r border-borderPrimary dark:border-darkBorder bg-[#f2f3f5] dark:bg-darkCard flex flex-col" style="width: 280px; min-width: 200px; max-width: 600px;">
-            <div class="h-[75px] flex items-center justify-between px-5 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder">
-                <div class="flex flex-col cursor-pointer" onclick="goHome()">
+        <!-- 사이드바 오버레이 (모바일 확장 시에만 사용) -->
+        <div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-30 hidden" onclick="toggleSidebar()"></div>
+        
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 transition-all duration-300 ease-in-out flex-shrink-0 border-r border-borderPrimary dark:border-darkBorder bg-[#f2f3f5] dark:bg-darkCard flex flex-col w-[280px]">
+            <!-- 헤더 영역 -->
+            <div class="h-[75px] flex items-center px-5 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder overflow-hidden relative">
+                <!-- 확장 모드: 텍스트 헤더 -->
+                <div id="sidebarFullHeader" class="flex flex-col cursor-pointer transition-opacity duration-300" onclick="goHome()">
                     <span class="font-black text-xl tracking-tight dark:text-white leading-tight">Drift 0020 <span class="text-theseusGold">*reprise</span> <span class="text-xs font-medium text-gray-400 ml-1">archive</span></span>
-                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">by Amrak Amrahd<br><span id="headerTimestamp" class="text-[9px] font-normal opacity-80 normal-case">2026-06-08 00:50</span></span>
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">by Amrak Amrahd<br><span id="headerTimestamp" class="text-[9px] font-normal opacity-80 normal-case">2026-06-08 21:30</span></span>
                 </div>
-
+                <!-- 미니 모드: 양 이모지 (숨김 상태로 시작) -->
+                <div id="sidebarMiniHeader" class="hidden flex-1 items-center justify-center cursor-pointer text-2xl transition-opacity duration-300" onclick="goHome()" title="Home">🐑</div>
+                
+                <!-- 닫기 버튼 (모바일 확장 시에만 유용, 위치를 절대값으로 고정하여 헤더 텍스트에 영향 안 주게 함) -->
+                <button onclick="toggleSidebar()" class="md:hidden absolute right-5 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-opacity duration-300" id="sidebarCloseBtn">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
             </div>
             
-            <div class="p-4 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder">
+            <!-- 유저 검색: 미니 모드에선 숨김 -->
+            <div id="userSearchContainer" class="p-4 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder transition-all duration-300 overflow-hidden">
                 <div class="relative">
                     <i class="fa-solid fa-search absolute left-4 top-3.5 text-gray-400 text-sm"></i>
                     <input type="text" id="userSearch" placeholder="유저 필터..." class="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border-none rounded-full text-sm focus:ring-1 focus:ring-theseusGold dark:text-white transition-all">
                 </div>
             </div>
+
+            <!-- 유저 리스트 -->
             <nav class="flex-1 overflow-y-auto pt-2" id="userList"></nav>
         </aside>
 
-        <!-- 드래그 핸들 -->
-        <div id="resizer" class="w-0.5 cursor-col-resize hover:bg-theseusGold transition-colors bg-borderPrimary dark:bg-darkBorder z-20"></div>
+        <!-- 드래그 핸들 (제거됨) -->
 
-        <main class="flex-1 flex flex-col min-w-0 bg-[#ffffff] dark:bg-[#191b22]">
-            <header class="h-[60px] flex items-center px-6 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder sticky top-0 z-10">
+        <main id="mainContent" class="flex-1 flex flex-col min-w-0 bg-[#ffffff] dark:bg-[#191b22] transition-all duration-300 ease-in-out ml-[280px]">
+            <header class="h-[60px] flex items-center px-4 md:px-6 bg-white dark:bg-darkCard border-b border-borderPrimary dark:border-darkBorder sticky top-0 z-10">
+                <!-- 햄버거 버튼: 사이드바 토글용 -->
+                <button onclick="toggleSidebar()" class="mr-3 text-gray-500 hover:text-theseusGold transition-colors">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
                 <div class="flex-1 max-w-2xl relative">
                     <i class="fa-solid fa-magnifying-glass absolute left-4 top-3 text-gray-400"></i>
                     <input type="text" id="statusSearch" placeholder="공학부 from:@amrak since:2026-03-14 until:2026-04-12" class="w-full pl-11 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border-none rounded-full text-sm focus:ring-1 focus:ring-theseusGold dark:text-white transition-all">
                 </div>
-                <div class="flex items-center gap-4 ml-auto">
+                <div class="flex items-center gap-6 ml-auto pl-8">
                     <button id="themeToggle" class="hover:text-theseusGold transition-colors flex items-center gap-2 font-bold text-sm text-gray-500">
                         <i class="fa-solid fa-sun dark:hidden"></i>
                         <i class="fa-solid fa-moon hidden dark:inline"></i>
-                        <span>테마</span>
+                        <span class="header-btn-text">테마</span>
                     </button>
-                    <button onclick="firebaseLogout()" title="로그아웃" class="text-gray-500 hover:text-red-500 transition-colors flex items-center gap-2 font-bold text-sm">
-                        <i class="fa-solid fa-right-from-bracket"></i> 로그아웃
+                    <button onclick="showLogoutModal()" title="로그아웃" class="text-gray-500 hover:text-red-500 transition-colors flex items-center gap-2 font-bold text-sm">
+                        <i class="fa-solid fa-right-from-bracket"></i> <span class="header-btn-text">로그아웃</span>
                     </button>
                 </div>
             </header>
@@ -297,8 +369,25 @@
             statusContainer: document.getElementById('statusContainer'), themeToggle: document.getElementById('themeToggle'),
             statusSearch: document.getElementById('statusSearch'), userSearch: document.getElementById('userSearch'),
             sentinel: document.getElementById('sentinel'), app: document.getElementById('app'),
-            threadModal: document.getElementById('threadModal'), modalContent: document.getElementById('modalContent')
+            threadModal: document.getElementById('threadModal'), modalContent: document.getElementById('modalContent'),
+            sidebar: document.getElementById('sidebar'), sidebarOverlay: document.getElementById('sidebarOverlay'),
+            logoutModal: document.getElementById('logoutModal')
         };
+
+        function showLogoutModal() { elements.logoutModal.classList.remove('hidden'); }
+        function closeLogoutModal() { elements.logoutModal.classList.add('hidden'); }
+        async function confirmLogout() { await window.firebaseLogout(); }
+
+        function toggleSidebar() {
+            document.body.classList.toggle('sidebar-toggled');
+            if (window.innerWidth < 768) {
+                if (document.body.classList.contains('sidebar-toggled')) {
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    document.body.style.overflow = '';
+                }
+            }
+        }
 
         // ── 드래그 감지: mousedown 위치를 저장해두고 click 시점에 비교 ──
         let _mouseDownX = 0;
@@ -483,8 +572,25 @@
             observeEncryptedMedia();
         }
 
-        function filterByUser(id) { selectedUserId = (selectedUserId === id) ? null : id; renderUserList(elements.userSearch.value); applyFilters(); }
-        function goHome() { searchTerm = ''; selectedUserId = null; elements.statusSearch.value = ''; elements.userSearch.value = ''; renderUserList(); applyFilters(); }
+        function filterByUser(id) { 
+            selectedUserId = (selectedUserId === id) ? null : id; 
+            renderUserList(elements.userSearch.value); 
+            applyFilters(); 
+            if (window.innerWidth < 768 && document.body.classList.contains('sidebar-toggled')) {
+                toggleSidebar();
+            }
+        }
+        function goHome() { 
+            searchTerm = ''; 
+            selectedUserId = null; 
+            elements.statusSearch.value = ''; 
+            elements.userSearch.value = ''; 
+            renderUserList(); 
+            applyFilters(); 
+            if (window.innerWidth < 768 && document.body.classList.contains('sidebar-toggled')) {
+                toggleSidebar();
+            }
+        }
 
         function createStatusHtml(s, isModalContext = false, isTarget = false) {
             const date = new Date(s.created_at);
@@ -778,34 +884,6 @@
         elements.statusSearch.addEventListener('keydown', e => { if (e.key === 'Enter') { searchTerm = e.target.value; applyFilters(); } });
         elements.userSearch.addEventListener('input', e => renderUserList(e.target.value));
         elements.themeToggle.addEventListener('click', () => { document.documentElement.classList.toggle('dark'); localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light'; });
-
-        // ── 사이드바 리사이즈 ──────────────────────────────────────────
-        const resizer = document.getElementById('resizer');
-        const sidebar = document.getElementById('sidebar');
-        let isResizing = false;
-
-        resizer.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            document.body.style.cursor = 'col-resize';
-            document.body.style.userSelect = 'none';
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-            const newWidth = e.clientX;
-            if (newWidth > 200 && newWidth < 600) {
-                sidebar.style.width = newWidth + 'px';
-            }
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (isResizing) {
-                isResizing = false;
-                document.body.style.cursor = '';
-                document.body.style.userSelect = '';
-            }
-        });
-        // ────────────────────────────────────────────────────────────────
     </script>
 </body>
 </html>
